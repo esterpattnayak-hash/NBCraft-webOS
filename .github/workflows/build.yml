@@ -7,22 +7,17 @@ on:
 
 jobs:
   linux:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: SDL 2
-            flags: '-DNBC_PLATFORM=sdl2 -DBC_GFX_API=OGL'
-            packages: 'libsdl2-dev'
-    name: Linux (${{ matrix.name }})
+    name: Linux (SDL 2)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
       - name: Install dependencies
-        run: sudo apt-get install -y ${{ matrix.packages }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --fix-missing libsdl2-dev
       - name: Build
         run: |
-          cmake -B build ${{ matrix.flags }}
+          cmake -B build -DNBC_PLATFORM=sdl2 -DBC_GFX_API=OGL
           cmake --build build
