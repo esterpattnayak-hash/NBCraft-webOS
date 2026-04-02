@@ -1,0 +1,112 @@
+/********************************************************************
+	Minecraft: Pocket Edition - Decompilation Project
+	Copyright (C) 2023 iProgramInCpp
+	
+	The following code is licensed under the BSD 1 clause license.
+	SPDX-License-Identifier: BSD-1-Clause
+ ********************************************************************/
+
+#pragma once
+
+#include "ItemInHandRenderer.hpp"
+#include "client/gui/MenuPointer.hpp"
+#include "renderer/MatrixStack.hpp"
+#include "renderer/hal/interface/DepthStencilState.hpp"
+
+class Minecraft;
+class Timer;
+class Entity;
+
+class LevelRenderer;
+class ParticleEngine;
+class GameRenderer
+{
+private:
+	void _init();
+public:
+	GameRenderer() { _init(); }
+	GameRenderer(Minecraft*);
+	~GameRenderer();
+
+private:
+	void _buildPointerMesh();
+	void _initResources();
+	void _clearFrameBuffer();
+	void _renderItemInHand(float, int);
+	void _renderDebugOverlay(float a);
+	void _renderVertexGraph(int vertices, int h);
+
+public:
+	void saveMatrices();
+	void setupCamera(float f, int i);
+	void bobHurt(Matrix& matrix, float f);
+	void bobView(Matrix& matrix, float f);
+	void moveCameraToPlayer(Matrix& matrix, float f);
+
+#ifndef ORIGINAL_CODE
+	void renderNoCamera();
+#endif
+
+	void renderLevel(float);
+	void renderFramedItems(const Vec3& camPos, LevelRenderer& levelRenderer, const Entity& camera, float f, ParticleEngine& particleEngine, float i);
+	void render(const Timer&);
+	void renderWeather(float f);
+	void renderPointer(const MenuPointer& pointer);
+	void setLevel(Level* pLevel, Dimension* pDimension);
+	// Range: 0.0 - 1.0
+	void setGamma(float gamma);
+	void tick();
+	void setupGuiScreen();
+	void onGraphicsReset();
+	void zoomRegion(float zoom, const Vec2& region);
+	void unZoomRegion();
+	void pick(float);
+	void applyTurnDelta(const Vec2& turnDelta);
+
+	float getFov(float f);
+
+protected:
+	float field_14;
+	float field_18;
+	float field_1C;
+	float field_20;
+	float field_24;
+	float field_28;
+	float field_2C;
+	float field_30;
+	float field_34;
+	float field_38;
+	float field_3C;
+	float field_40;
+	float m_zoom;
+	Vec2 m_zoomRegion;
+	float field_50;
+	float field_54;
+	float field_58;
+	float field_5C;
+	Vec2 m_smoothTurnDelta;
+	Vec2 m_turnDelta;
+	float field_84;
+	mce::Mesh m_pointerMesh;
+
+public:
+	ItemInHandRenderer* m_pItemInHandRenderer;
+	Minecraft* m_pMinecraft;
+	Level* m_pLevel;
+
+	float m_renderDistance;
+	int field_C;
+	Entity* m_pHovered;
+	// protected fields
+
+	Matrix m_mtxProj;
+	Matrix m_mtxView;
+
+	int m_shownFPS, m_shownChunkUpdates, m_lastUpdatedMS;
+
+	int m_keepPic;
+
+	int m_envTexturePresence;
+	Random m_random;
+};
+

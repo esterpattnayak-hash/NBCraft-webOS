@@ -1,0 +1,59 @@
+//
+//  AppPlatform_iOS.h
+//  NBCraft
+//
+//  Created by Brent on 10/30/23.
+//  Copyright (c) 2023 NBCraft. All rights reserved.
+//
+
+#pragma once
+
+#import "NBCViewController.h"
+
+#include <string>
+
+#include "client/app/AppPlatform.hpp"
+
+#include "client/player/input/Mouse.hpp"
+#include "client/player/input/Keyboard.hpp"
+#include "common/Logger.hpp"
+
+class AppPlatform_iOS : public AppPlatform
+{
+private:
+    NSString* _getBundleResourcePath(const std::string &path) const;
+    
+public:
+	AppPlatform_iOS(NBCViewController *viewController);
+	~AppPlatform_iOS();
+	
+	void initSoundSystem() override;
+	
+	int checkLicense() override;
+	int getScreenWidth() const override;
+	int getScreenHeight() const override;
+	void loadImage(ImageData& data, const std::string& path) override;
+	bool isTouchscreen() const override;
+	std::string getAssetPath(const std::string& path) const override;
+	SoundSystem* getSoundSystem() const override { return m_pSoundSystem; }
+	
+	// Also add these to allow proper text input within the game.
+	bool shiftPressed() override;
+	void setShiftPressed(bool b, bool isLeft);
+	void showKeyboard(LocalPlayerID playerId, const VirtualKeyboard& keyboard) override;
+	void hideKeyboard(LocalPlayerID playerId) override;
+	unsigned int getKeyboardUpOffset() const override;
+	
+	// Also add these to allow saving options.
+	bool hasFileSystemAccess() override;
+private:
+	Logger* m_pLogger;
+	SoundSystem* m_pSoundSystem;
+	
+	NBCViewController* m_pViewController;
+	
+	bool m_bShiftPressed[2];
+	
+	bool m_bIsKeyboardShown;
+};
+

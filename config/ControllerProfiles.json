@@ -1,0 +1,15 @@
+{
+  "Xbox": {
+    "A": "jump",
+    "RT": "break",
+    "LT": "place"
+  },
+  "PlayStation": {
+    "Cross": "jump",
+    "R2": "break",
+    "L2": "place"
+  },
+  "Generic": {
+    "Button0": "jump"
+  }
+}

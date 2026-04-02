@@ -1,0 +1,13 @@
+REMOTE:
+Dpad move
+OK jump
+Red break
+Green place
+Back pause
+
+CONTROLLER:
+Left stick move
+Right stick camera
+A jump
+RT break
+LT place

@@ -1,0 +1,7 @@
+{
+  "renderDistance": 6,
+  "targetFPS": 30,
+  "uiScale": "auto",
+  "controllerSensitivity": 1.0,
+  "graphicsPreset": "auto"
+}

@@ -1,0 +1,148 @@
+/********************************************************************
+	Minecraft: Pocket Edition - Decompilation Project
+	Copyright (C) 2023 iProgramInCpp
+
+	The following code is licensed under the BSD 1 clause license.
+	SPDX-License-Identifier: BSD-1-Clause
+ ********************************************************************/
+
+#pragma once
+
+#include "Entity.hpp"
+
+class Mob : public Entity
+{
+private:
+	void _init();
+
+public:
+	Mob(Level* pLevel);
+	virtual ~Mob();
+
+protected:
+	virtual void actuallyHurt(int damage);
+
+public:
+	// overrides
+	void reset() override;
+	void lerpTo(const Vec3& pos, const Vec2& rot, int steps) override;
+	void tick() override;
+	void baseTick() override;
+	float getHeadHeight() const override { return 0.85f * m_bbHeight; }
+	bool isPickable() const override { return !m_bRemoved; }
+	bool isPushable() const override { return !m_bRemoved; }
+	bool isShootable() const override { return true; }
+	bool isAlive() const override;
+	bool isMob() const override { return true; }
+	bool interpolateOnly() const override;
+	bool hurt(Entity*, int) override;
+	void animateHurt() override;
+	void setSize(float rad, float height) override;
+	void outOfWorld() override;
+	void causeFallDamage(float level) override;
+	void handleEntityEvent(EventType::ID eventId) override;
+	void addAdditionalSaveData(CompoundTag& tag) const override;
+	void readAdditionalSaveData(const CompoundTag& tag) override;
+
+	// virtuals
+	virtual void knockback(Entity* pEnt, int a, float x, float z);
+	virtual void die(Entity* pCulprit);
+	virtual bool canSee(Entity* pEnt) const;
+	virtual bool onLadder() const;
+	virtual void spawnAnim();
+	virtual std::string getTexture() const;
+	virtual bool isWaterMob() const { return false; }
+	virtual void playAmbientSound();
+	virtual int getAmbientSoundInterval() const;
+	virtual void superTick() { Entity::tick(); }
+	virtual void heal(int health);
+	virtual HitResult pick(float, float);
+	virtual void travel(const Vec2& pos);
+	virtual void updateWalkAnim();
+	virtual void aiStep();
+	virtual void lookAt(Entity* pEnt, float, float);
+	virtual bool isLookingAtAnEntity() { return m_pEntLookedAt != nullptr; }
+	virtual bool isSlowedByLiquids() const { return true; }
+	virtual Entity* getLookingAt() const { return m_pEntLookedAt; }
+	virtual void beforeRemove() {}
+	virtual bool canSpawn();
+	virtual float getAttackAnim(float f) const;
+	virtual Vec3 getLookAngle(float f) const { return getViewVector(1.0f); }
+	virtual int getMaxSpawnClusterSize() const { return 4; }
+	virtual const ItemStack& getCarriedItem() const { return ItemStack::EMPTY; }
+	virtual bool isBaby() const { return false; }
+	virtual bool removeWhenFarAway() const { return true; }
+	virtual int getDeathLoot() const { return 0; }
+	virtual void dropDeathLoot();
+	virtual bool isImmobile() const { return m_health <= 0; }
+	virtual void jumpFromGround();
+	virtual void updateAi();
+	virtual int getMaxHeadXRot() const { return 10; }
+	virtual int getMaxHealth() const { return 10; }
+	virtual float getSoundVolume() const { return 1.0f; }
+	virtual std::string getAmbientSound() const { return ""; }
+	virtual std::string getHurtSound() const { return "random.hurt"; }
+	virtual std::string getDeathSound() const { return "random.hurt"; }
+	virtual float getWalkingSpeedModifier() const { return 0.7f; }
+	virtual void checkDespawn(Mob* nearestMob);
+	virtual void checkDespawn();
+	virtual void swing();
+
+	float rotlerp(float, float, float);
+	void updateAttackAnim();
+    
+private:
+     int m_ambientSoundTime;
+	 Vec3 m_lastSentPos;
+	 Vec2 m_lastSentRot;
+	 Vec3 m_lastSentVel;
+
+public:
+	int m_invulnerableDuration;
+	float m_timeOffs;
+	float m_rotA;
+	float m_yBodyRot;
+	float m_yBodyRotO;
+	float m_oAttackAnim;
+	float m_attackAnim;
+	int m_health;
+	int m_lastHealth;
+	int m_hurtTime;
+	int m_hurtDuration;
+	float m_hurtDir;
+	int m_deathTime;
+	int m_attackTime;
+	float m_oTilt;
+	float m_tilt;
+	int m_lookTime;
+	int m_modelNum;
+	float m_walkAnimSpeedO;
+	float m_walkAnimSpeed;
+	float m_walkAnimPos;
+	Random m_random;
+	int m_noActionTime;
+	Vec2 m_moveVelocity;
+	float m_yRotA;
+	bool m_bJumping;
+	float m_defaultLookAngle;
+	float m_runSpeed;
+	float m_flyingFriction;
+	std::string m_texture;
+	std::string m_class;
+	int m_deathScore;
+	float m_oRun;
+	float m_run;
+	float m_animStep;
+	float m_animStepO;
+	float m_rotOffs;
+	float m_bobStrength;
+	bool m_bDead;
+	int m_lSteps;
+	Vec3 m_lPos;
+	Vec2 m_lRot;
+	int m_lastHurt;
+	Entity* m_pEntLookedAt;
+
+	bool m_bSwinging;
+	int m_swingTime;
+};

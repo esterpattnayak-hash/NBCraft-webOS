@@ -1,0 +1,7 @@
+NBCraft webOS Edition install guide
+
+1 Build WebGL version
+2 Copy js/wasm/data into platforms/webos
+3 Install webOS developer mode
+4 Use ares-install to install ipk
+5 Launch from TV

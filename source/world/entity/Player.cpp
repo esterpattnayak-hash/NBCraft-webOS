@@ -1,0 +1,622 @@
+/********************************************************************
+	Minecraft: Pocket Edition - Decompilation Project
+	Copyright (C) 2023 iProgramInCpp
+	
+	The following code is licensed under the BSD 1 clause license.
+	SPDX-License-Identifier: BSD-1-Clause
+ ********************************************************************/
+
+#include "Player.hpp"
+#include "world/level/Level.hpp"
+#include "nbt/CompoundTag.hpp"
+
+void Player::_init()
+{
+	m_itemInUseDuration = 0;
+
+	m_score = 0;
+	m_oBob = 0.0f;
+	m_bob = 0.0f;
+	m_dmgSpill = 0;
+	m_dimension = 0;
+	m_bFlying = false;
+	m_jumpTriggerTime = 0;
+	m_destroyingBlock = false;
+
+	m_abilities.bCanFly = false;
+	m_abilities.bInvulnerable = false;
+}
+
+Player::Player(Level* pLevel, GameType playerGameType) : Mob(pLevel)
+{
+	_init();
+	m_pDescriptor = &EntityTypeDescriptor::player;
+	m_pInventory = nullptr;
+	m_userType = 0;
+	m_name = "";
+	m_bHasRespawnPos = false;
+
+	m_renderType = RENDER_HUMANOID;
+
+	setPlayerGameType(playerGameType);
+
+	m_pInventory = new Inventory(this);
+
+	m_pContainerMenu = nullptr;
+	m_pInventoryMenu = new InventoryMenu(m_pInventory);
+
+	setDefaultHeadHeight();
+
+	Vec3 pos = m_pLevel->getSharedSpawnPos();
+
+	moveTo(Vec3(pos.x + 0.5f, pos.y + 1.0f, pos.z + 0.5f));
+
+	m_health = getMaxHealth();
+
+	m_class = "humanoid";
+	m_texture = "mob/char.png";
+
+	m_flameTime = 20;
+	m_rotOffs = 180.0f;
+
+}
+
+Player::~Player()
+{
+	delete m_pInventory;
+	delete m_pInventoryMenu;
+}
+
+void Player::reallyDrop(ItemEntity* pEnt)
+{
+	m_pLevel->addEntity(pEnt);
+}
+
+void Player::reset()
+{
+	Mob::reset();
+	_init();
+}
+
+void Player::remove()
+{
+	m_bIsInvisible = true;
+	Mob::remove();
+	m_pInventoryMenu->removed(this);
+	if (m_pContainerMenu)
+		m_pContainerMenu->removed(this);
+}
+
+bool Player::hurt(Entity* pEnt, int damage)
+{
+	if (m_abilities.bInvulnerable)
+		return false;
+    
+    m_noActionTime = 0;
+    if (m_health <= 0)
+    {
+        return false;
+    }
+    
+	if (pEnt != nullptr)
+	{
+		EntityTypeDescriptor entDesc = pEnt->getDescriptor();
+
+		if (entDesc.hasCategory(EntityCategories::MONSTER) || entDesc.hasCategory(EntityCategories::ABSTRACT_ARROW))
+		{
+			switch (m_pLevel->m_difficulty)
+			{
+				case 0:
+					damage = 0;
+					break;
+				case 1:
+					damage = damage / 3 + 1;
+					break;
+				case 2:
+					// Don't modify damage
+					break;
+				case 3:
+					damage = damage * 3 / 2;
+					break;
+				default:
+					assert(!"Unknown difficulty value");
+					break;
+			}
+		}
+	}
+
+    return damage == 0 ? false : Mob::hurt(pEnt, damage);
+}
+
+void Player::actuallyHurt(int damage)
+{
+	int damageReduction = 25 - m_pInventory->getArmorValue();
+	int totalDamage = damage * damageReduction + m_dmgSpill;
+	m_pInventory->hurtArmor(damage);
+	damage = totalDamage / 25;
+	m_dmgSpill = totalDamage % 25;
+	Mob::actuallyHurt(damage);
+}
+
+void Player::awardKillScore(Entity* pKilled, int score)
+{
+	m_score += score;
+}
+
+void Player::resetPos(bool respawn)
+{
+	setDefaultHeadHeight();
+	setSize(0.6f, 1.8f);
+
+	Entity::resetPos();
+	m_bIsInvisible = false;
+	if (respawn)
+	{
+		m_deathTime = 0;
+		m_health = getMaxHealth();
+	}
+}
+
+void Player::die(Entity* pCulprit)
+{
+	Mob::die(pCulprit);
+	setSize(0.2f, 0.2f);
+	setPos(m_pos); // update hitbox
+	m_vel.y = 0.1f;
+
+	if (!m_pLevel->m_bIsClientSide)
+	{
+		if (m_name == "Notch")
+			drop(ItemStack(Item::apple), true);
+	}
+#if NETWORK_PROTOCOL_VERSION <= 3
+	m_pInventory->dropAll(m_pLevel->m_bIsClientSide);
+#endif
+
+	if (pCulprit)
+	{
+		m_vel.x = -0.1f * Mth::cos(float((m_hurtDir + m_rot.x) * M_PI / 180.0));
+		m_vel.z = -0.1f * Mth::cos(float((m_hurtDir + m_rot.x) * M_PI / 180.0));
+	}
+	else
+	{
+		m_vel.x = 0;
+		m_vel.z = 0;
+	}
+}
+
+void Player::aiStep()
+{
+	if (m_jumpTriggerTime > 0)
+		m_jumpTriggerTime--;
+
+    if (m_pLevel->m_difficulty == 0 &&
+        m_health < getMaxHealth() &&
+        m_tickCount % 20 * 12 == 0)
+    {
+       heal(1);
+    }
+
+#ifdef ENH_GUI_ITEM_POP
+    m_pInventory->tick();
+#endif
+	m_oBob = m_bob;
+    //Mob::aiStep(); // @PARITY: called in Java, calling here results in 2x speed player movement
+	float velLen = Mth::sqrt(m_vel.x * m_vel.x + m_vel.z * m_vel.z);
+	float velYAtan = Mth::atan(m_vel.y * -0.2f), x1 = 0.0f;
+
+	if (velLen > 0.1f)
+		velLen = 0.1f;
+
+	if (!m_bOnGround)
+	{
+		if (m_health > 0)
+		{
+			velLen = 0;
+			x1 = velYAtan * 15.0f;
+		}
+		else
+		{
+			velLen = x1 = 0.0f;
+		}
+	}
+
+	if (m_health <= 0)
+		velLen = 0.0f;
+
+	m_bob += (velLen - m_bob) * 0.4f;
+	m_tilt += (x1 - m_tilt) * 0.8f;
+
+	if (m_health <= 0)
+		return;
+
+	AABB scanAABB = m_hitbox;
+	scanAABB.grow(1, 1, 1);
+
+	EntityVector ents = m_pLevel->getEntities(this, scanAABB);
+
+	for (EntityVector::iterator it = ents.begin(); it != ents.end(); it++)
+	{
+		Entity* pEnt = *it;
+		if (pEnt->m_bRemoved)
+			continue;
+
+		touch(pEnt);
+	}
+
+	// only needed for non-local players for some reason
+	updateAttackAnim();
+}
+
+void Player::tick()
+{
+	Mob::tick();
+
+	if (!m_pLevel->m_bIsClientSide)
+	{
+		if (m_pContainerMenu && !m_pContainerMenu->stillValid(this))
+			closeContainer();
+	}
+}
+
+const ItemStack& Player::getCarriedItem() const
+{
+	// This only gets the first row slot
+	/*ItemStack* item = m_pInventory->getItem(m_pInventory->m_selectedSlot);
+  
+	if (ItemStack::isNull(item))
+		return nullptr;
+
+	return item;*/
+
+	return m_pInventory->getSelected();
+}
+
+void Player::updateAi()
+{
+}
+
+void Player::addAdditionalSaveData(CompoundTag& tag) const
+{
+	Mob::addAdditionalSaveData(tag);
+
+	ListTag* inventoryTag = new ListTag();
+	m_pInventory->save(*inventoryTag);
+	tag.put("Inventory", inventoryTag);
+
+	tag.putInt32("playerGameType", getPlayerGameType());
+	tag.putInt32("Dimension", m_dimension);
+
+	// Why would we save the player's sleep state? If they leave the game, just wake them up.
+	/*tag.putBoolean("Sleeping", m_bSleeping);
+	tag.putShort("SleepTimer", m_sleepTimer);
+	if (m_bSleeping)
+	{
+		setBedSleepPos(m_pos);
+		wake(true, true, false);
+	}*/
+
+	if (m_bHasRespawnPos)
+	{
+		tag.putInt32("SpawnX", m_respawnPos.x);
+		tag.putInt32("SpawnY", m_respawnPos.y);
+		tag.putInt32("SpawnZ", m_respawnPos.z);
+	}
+}
+
+void Player::readAdditionalSaveData(const CompoundTag& tag)
+{
+	Mob::readAdditionalSaveData(tag);
+
+	// Needs to load before Inventory, since Inventory won't load if Player is in creative mode
+	if (tag.contains("playerGameType"))
+	{
+		setPlayerGameType((GameType)tag.getInt32("playerGameType"));
+	}
+
+	if (tag.contains("Inventory"))
+		m_pInventory->load(*tag.getList("Inventory"));
+
+	m_dimension = tag.getInt32("Dimension");
+	//m_sleepTimer = tag.getInt32("SleepTimer");
+
+	if (tag.contains("SpawnX") && tag.contains("SpawnY") && tag.contains("SpawnZ")) {
+		setRespawnPos(TilePos(	static_cast<int>(tag.getInt32("SpawnX")),
+								static_cast<int>(tag.getInt32("SpawnY")),
+								static_cast<int>(tag.getInt32("SpawnZ"))));
+	}
+}
+
+void Player::travel(const Vec2& pos)
+{
+	// Normal movement
+	if (!m_bFlying)
+	{
+		Mob::travel(pos);
+		return;
+	}
+
+	// Flight movement
+	float yd = m_vel.y;
+	float oldFlyingFriction = m_flyingFriction;
+
+	m_flyingFriction = 0.05f;
+	Mob::travel(pos);
+	
+	m_flyingFriction = oldFlyingFriction;
+	m_vel.y = yd * 0.6;
+}
+
+void Player::causeFallDamage(float level)
+{
+	// There is absolutely no reason for this to be causing the bone cracking sound in creative mode.
+	if (!m_abilities.bInvulnerable)
+		Mob::causeFallDamage(level);
+}
+
+void Player::animateRespawn()
+{
+	
+}
+
+int Player::addResource(int x)
+{
+	return 0;
+}
+
+void Player::animateRespawn(Player*, Level*)
+{
+
+}
+
+void Player::attack(Entity* pEnt)
+{
+	int atkDmg = m_pInventory->getAttackDamage(pEnt);
+	if (atkDmg <= 0)
+		return;
+
+	if (m_vel.y < 0.0f)
+		atkDmg++;
+
+	pEnt->hurt(this, atkDmg);
+	
+	ItemStack& item = getSelectedItem();
+	bool isMob = pEnt->getDescriptor().hasCategory(EntityCategories::MOB);
+	if (!item.isEmpty() && isMob)
+	{
+		item.hurtEnemy((Mob*)pEnt, this);
+		if (item.m_count <= 0) {
+			item.snap(this);
+			removeSelectedItem();
+		}
+	}
+
+	// Needs to be uncommented if/when wolves are implemented
+	/*
+	if (isMob && pEnt->isAlive())
+	{
+		alertWolves(static_cast<Mob*>(pEnt), true);
+	}
+	*/
+}
+
+void Player::useItem(ItemStack& item) const
+{
+	if (!isCreative())
+		item.shrink(1);
+}
+
+void Player::releaseUsingItem()
+{
+	if (!m_itemInUse.isEmpty())
+		m_itemInUse.releaseUsing(*m_pLevel, *this, m_itemInUseDuration);
+
+	stopUsingItem();
+}
+
+void Player::stopUsingItem()
+{
+	m_itemInUse.setEmpty();
+	m_itemInUseDuration = 0;
+
+	if (!m_pLevel->m_bIsClientSide)
+	{
+		if (isUsingItem())
+			setSharedFlag(C_PLAYER_FLAG_USING_ITEM, false);
+	}
+}
+
+bool Player::canDestroy(const Tile* pTile) const
+{
+	// If the tile's material does not need tool check then allow destroy regardless of equipped item
+	if (pTile->m_pMaterial->isMineable())
+		return true;
+
+	ItemStack& item = getSelectedItem();
+	if (!item.isEmpty())
+		return item.canDestroySpecial(pTile);
+
+	return false;
+}
+
+void Player::displayClientMessage(const std::string& msg)
+{
+
+}
+
+float Player::getDestroySpeed(const Tile* tile) const
+{
+	float speed = 1.0f;
+	
+	ItemStack& item = getSelectedItem();
+	if (!item.isEmpty())
+	{
+		// Original multiplies but there's no need since you're just multiplying by 1 on the first check.
+		speed = item.getDestroySpeed(tile);
+	}
+
+	// Speed penalty for being underwater
+	if (isUnderLiquid(Material::water))
+	{
+		speed /= 5.0f;
+	}
+
+	// Speed penalty for jumping/falling
+	if (!m_bOnGround)
+	{
+		speed /= 5.0f;
+	}
+
+	return speed;
+}
+
+int Player::getInventorySlot(int x) const
+{
+	return 0;
+}
+
+Dimension* Player::getDimension() const
+{
+	return m_pLevel->getDimension(getDimensionId());
+}
+
+void Player::prepareCustomTextures()
+{
+
+}
+
+void Player::respawn()
+{
+
+}
+
+void Player::rideTick()
+{
+
+}
+
+void Player::setDefaultHeadHeight()
+{
+	m_heightOffset = 1.62f;
+}
+
+void Player::setRespawnPos(const TilePos& pos)
+{
+	/*if (!pos)
+	{
+		m_bHasRespawnPos = false;
+		return;
+	}*/
+
+	m_bHasRespawnPos = true;
+	m_respawnPos = pos;
+}
+
+/*void Player::drop()
+{
+	// @PARITY: From b1.2_02, doesn't exist in PE
+	// Isn't called anywhere, but is overriden in MultiplayerLocalPlayer with a PlayerActionPacket
+	ItemStack* item = getSelectedItem();
+	if (!item)
+		return;
+
+	drop(m_pInventory->removeItem(*item, 1));
+}*/
+
+void Player::drop(const ItemStack& item, bool randomly)
+{
+	if (item.isEmpty())
+		return;
+
+	ItemEntity* pItemEntity = new ItemEntity(m_pLevel, Vec3(m_pos.x, m_pos.y - 0.3f + getHeadHeight(), m_pos.z), item);
+	pItemEntity->m_throwTime = 40;
+
+	if (randomly)
+	{
+		float throwPower = 0.5f * m_random.nextFloat();
+		float throwAngle = m_random.nextFloat();
+
+		pItemEntity->m_vel.x = -(throwPower * Mth::sin(2 * float(M_PI) * throwAngle));
+		pItemEntity->m_vel.z = (throwPower * Mth::cos(2 * float(M_PI) * throwAngle));
+		pItemEntity->m_vel.y = 0.2f;
+	}
+	else
+	{
+		pItemEntity->m_vel.x = -(Mth::sin(m_rot.x / 180.0f * float(M_PI)) * Mth::cos(m_rot.y / 180.0f * float(M_PI))) * 0.3f;
+		pItemEntity->m_vel.z = (Mth::cos(m_rot.x / 180.0f * float(M_PI)) * Mth::cos(m_rot.y / 180.0f * float(M_PI))) * 0.3f;
+		pItemEntity->m_vel.y = 0.1f - Mth::sin(m_rot.y / 180.0f * float(M_PI)) * 0.3f;
+
+		float f1 = m_random.nextFloat();
+		float f2 = m_random.nextFloat();
+
+		pItemEntity->m_vel.x += 0.02f * f2 * Mth::cos(2 * float(M_PI) * f1);
+		pItemEntity->m_vel.y += 0.1f * (m_random.nextFloat() - m_random.nextFloat());
+		pItemEntity->m_vel.z += 0.02f * f2 * Mth::sin(2 * float(M_PI) * f1);
+	}
+
+	reallyDrop(pItemEntity);
+}
+
+void Player::startCrafting(const TilePos& pos)
+{
+
+}
+
+void Player::startStonecutting(const TilePos& pos)
+{
+
+}
+
+void Player::startDestroying()
+{
+	m_destroyingBlock = true;
+}
+
+void Player::stopDestroying()
+{
+	m_destroyingBlock = false;
+}
+
+void Player::touch(Entity* pEnt)
+{
+	pEnt->playerTouch(this);
+}
+
+void Player::interact(Entity* pEnt)
+{
+	if (pEnt->interact(this))
+		return;
+
+	bool isMob = pEnt->getDescriptor().hasCategory(EntityCategories::MOB);
+	if (!isMob)
+		return;
+
+	ItemStack& item = getSelectedItem();
+	if (!item.isEmpty()) {
+		item.interactEnemy(static_cast<Mob*>(pEnt));
+		if (item.m_count <= 0) {
+			item.snap(this);
+			removeSelectedItem();
+		} 
+	} 
+}
+
+void Player::setPlayerGameType(GameType playerGameType)
+{
+	_playerGameType = playerGameType;
+
+	bool elevatedPrivs = (playerGameType == GAME_TYPE_CREATIVE || playerGameType == GAME_TYPE_SPECTATOR);
+
+	m_abilities.bCanFly = elevatedPrivs;
+	m_abilities.bInvulnerable = elevatedPrivs;
+}
+
+ItemStack& Player::getSelectedItem() const
+{
+	return m_pInventory->getSelected();
+}
+
+void Player::removeSelectedItem()
+{
+	m_pInventory->setSelectedItem(ItemStack::EMPTY);
+}

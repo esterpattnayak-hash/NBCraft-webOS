@@ -1,0 +1,227 @@
+/********************************************************************
+    Minecraft: Pocket Edition - Decompilation Project
+    Copyright (C) 2023 iProgramInCpp
+    
+    The following code is licensed under the BSD 1 clause license.
+    SPDX-License-Identifier: BSD-1-Clause
+ ********************************************************************/
+
+#include "SoundEngine.hpp"
+#include "SoundDefs.hpp"
+#include "common/Mth.hpp"
+#include "world/entity/Mob.hpp"
+#include "client/app/AppPlatform.hpp"
+
+SoundEngine::SoundEngine(SoundSystem* soundSystem, float maxDistance)
+{
+    m_pSoundSystem = soundSystem;
+    m_pOptions = nullptr;
+    field_40 = 0;
+    m_listenerPosition = Vec3::ZERO;
+    m_listenerOrientation = Vec2::ZERO;
+    m_soundDistance = maxDistance; // PE: 1.0f / maxDistance
+    m_noMusicDelay = m_random.nextInt(12000);
+    field_A20 = 0;
+    m_muted = false;
+}
+
+float SoundEngine::_getVolumeMult(float maxDistance, float distance, const Vec3& pos)
+{
+    // Taken from 0.7.0
+    //float gain = 1.1f - (distance * maxDistance);
+    
+    // Taken from paulscode.sound.libraries.SourceLWJGLOpenAL.calculateGain()
+    float gain = 1.0f - (distance / maxDistance);
+
+    return Mth::clamp(gain, -1.0f, 1.0f);
+}
+
+void SoundEngine::_playMusic(bool resetDelay)
+{
+    std::string songPath;
+    if (m_songs.any(songPath))
+    {
+		if (resetDelay)
+			m_noMusicDelay = m_random.nextInt(12000) + 12000;
+
+        m_pSoundSystem->setMusicVolume(m_pOptions->m_musicVolume.get());
+        m_pSoundSystem->playMusic(songPath);
+    }
+}
+
+void SoundEngine::init(Options* options)
+{
+    // TODO: Who's the genius who decided it'd be better to check a name string rather than an enum?
+    m_pOptions = options;
+    // Load Sounds
+    SoundDesc::_loadAll();
+
+#define SOUND(category, name) m_sounds.add(#category "." #name, SA_##name);
+#define SOUND_NUM(category, name, number) m_sounds.add(#category "." #name, SA_##name##number);
+#include "sound_list.h"
+#undef SOUND
+#undef SOUND_NUM
+
+#define MUSIC(name, number) m_songs.add(#name, "music/" #name #number ".ogg");
+#define NEWMUSIC(name, number) m_songs.add(#name, "newmusic/" #name #number ".ogg");
+#include "music_list.h"
+#undef MUSIC
+}
+
+void SoundEngine::enable(bool b)
+{
+}
+
+void SoundEngine::updateOptions()
+{
+}
+
+void SoundEngine::mute()
+{
+    m_muted = true;
+}
+
+void SoundEngine::unMute()
+{
+    m_muted = false;
+}
+
+void SoundEngine::destroy()
+{
+    // Un-load Sounds
+    SoundDesc::_unloadAll();
+}
+
+void SoundEngine::playMusic(bool resetDelay)
+{
+    if (m_pOptions->m_musicVolume.get() <= 0.0f || m_pSoundSystem->isPlayingMusic())
+        return;
+    
+    _playMusic(resetDelay);
+}
+
+void SoundEngine::playMusicTick()
+{
+    if (m_pOptions->m_musicVolume.get() <= 0.0f)
+        return;
+
+    if (!m_pSoundSystem->isPlayingMusic()/* && !soundSystem.playing("streaming")*/)
+    {
+        if (m_noMusicDelay > 0)
+        {
+            --m_noMusicDelay;
+            return;
+        }
+
+		_playMusic(true);
+    }
+}
+
+void SoundEngine::forcePlayMusic()
+{
+	// we're still not playing music if you can't hear it, fuck that
+    if (m_pOptions->m_musicVolume.get() <= 0.0f)
+        return;
+    
+    if (m_pSoundSystem->isPlayingMusic())
+	{
+        m_pSoundSystem->stopMusic();
+	}
+
+	_playMusic();
+}
+
+void SoundEngine::updateListener(const Mob* player, float elapsedTime)
+{
+	  assert(m_pSoundSystem->isAvailable());
+
+    if (m_pOptions->m_masterVolume.get() > 0.0f)
+    {
+        if (player != nullptr)
+        {
+            Vec3 pos = player->getPos(elapsedTime);
+            pos.y -= player->m_heightOffset;
+            m_listenerPosition = pos;
+            m_pSoundSystem->setListenerPos(pos);
+
+            Vec2 rot = player->getRot(elapsedTime);
+            m_listenerOrientation = rot;
+            m_pSoundSystem->setListenerAngle(rot);
+        }
+    }
+}
+
+void SoundEngine::update()
+{
+    assert(m_pSoundSystem->isAvailable());
+    m_pSoundSystem->update();
+}
+
+void SoundEngine::play(const std::string& name, const Vec3& pos, float volume, float pitch)
+{
+    float vol = m_pOptions->m_masterVolume.get() * volume;
+    if (vol <= 0.0f)
+        return;
+
+    float distance = pos.distanceTo(m_listenerPosition);
+    float maxDistance = m_soundDistance;
+    // The louder the volume of the sound, the greater its max distance
+    if (volume > 1.0f)
+        maxDistance *= volume;
+
+    if (distance > maxDistance)
+        return;
+
+    Vec3 nPos;
+    float gain;
+    if (distance < SOUND_ATTENUATION_MIN_DISTANCE)
+    {
+        nPos = Vec3::ZERO;
+        gain = 1.0f;
+    }
+    else
+    {
+        nPos = pos;
+        gain = _getVolumeMult(maxDistance, distance, pos);
+    }
+
+    float cVolume = Mth::clamp(vol * gain, 0.0f, 1.0f);
+    float cPitch = Mth::clamp(pitch, 0.5f, 2.0f); // Clamp to values specified by Paulscode
+    SoundDesc sd;
+
+    if (m_sounds.get(name, sd))
+    {
+        m_pSoundSystem->playAt(sd, nPos, cVolume, cPitch);
+    }
+}
+
+void SoundEngine::playUI(const std::string& name, float volume, float pitch)
+{
+    volume *= 0.25f; // present on Java b1.2_02, but not Pocket for some reason
+    float vol = m_pOptions->m_masterVolume.get() * volume;
+    if (vol <= 0.0f)
+        return;
+
+    float cVolume = Mth::clamp(vol, 0.0f, 1.0f);
+    SoundDesc sd;
+
+    if (m_sounds.get(name, sd))
+    {
+        m_pSoundSystem->playAt(sd, Vec3::ZERO, cVolume, pitch);
+    }
+}
+
+void SoundEngine::playMusic(const std::string& name)
+{
+    float vol = m_pOptions->m_musicVolume.get();
+    if (vol <= 0.0f)
+        return;
+
+    std::string path;
+
+    if (m_songs.get(name, path))
+    {
+        m_pSoundSystem->setMusicVolume(vol);
+        m_pSoundSystem->playMusic(path);
+    }
+}

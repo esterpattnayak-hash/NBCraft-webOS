@@ -1,0 +1,9 @@
+{
+  "id": "com.nbcraft.game",
+  "version": "1.0.0",
+  "vendor": "NBCraft",
+  "type": "web",
+  "main": "index.html",
+  "title": "NBCraft",
+  "icon": "icon.png"
+}

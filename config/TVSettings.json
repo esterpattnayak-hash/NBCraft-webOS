@@ -1,0 +1,8 @@
+{
+  "graphicsPreset": "auto",
+  "targetFPS": 30,
+  "renderDistance": 6,
+  "uiScale": "auto",
+  "safeMargins": true,
+  "controllerSensitivity": 1.0
+}

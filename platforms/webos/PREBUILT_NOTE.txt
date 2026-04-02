@@ -1,0 +1,1 @@
+Place nbcraft.js nbcraft.wasm nbcraft.data here after emscripten build.
