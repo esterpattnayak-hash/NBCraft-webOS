@@ -1,6 +1,8 @@
 name: 'Build'
 
 on:
+  push:
+    branches: [main]
   - pull_request
 
 jobs:
@@ -16,7 +18,9 @@ jobs:
                     flags: '-DNBC_PLATFORM=sdl1 -DNBC_GFX_API=OGL'
                     packages: 'libsdl1.2-dev'
         name: Linux (${{ matrix.name }})
-        runs-on: ubuntu-24.04
+        runs-on:
+  push:
+    branches: [main] ubuntu-24.04
         steps:
           - name: Get Time
             id: get-time
@@ -56,7 +60,9 @@ jobs:
 
     wasm:
         name: WASM
-        runs-on: ubuntu-24.04
+        runs-on:
+  push:
+    branches: [main] ubuntu-24.04
         steps:
           - name: Get Time
             id: get-time
@@ -97,7 +103,9 @@ jobs:
                     backend_name: 'SDL1'
                     packages: 'sdl12-compat'
         name: macOS (${{ matrix.name }})
-        runs-on: macos-15
+        runs-on:
+  push:
+    branches: [main] macos-15
         steps:
           - name: Checkout Repository
             uses: actions/checkout@v6
@@ -122,7 +130,9 @@ jobs:
         strategy:
             fail-fast: false
         name: iOS
-        runs-on: ubuntu-24.04
+        runs-on:
+  push:
+    branches: [main] ubuntu-24.04
         steps:
           - name: Checkout Repository
             uses: actions/checkout@v6
@@ -179,7 +189,9 @@ jobs:
                   - name: Native
                     directory: platforms/android/project
         name: Android (${{ matrix.name }})
-        runs-on: ubuntu-24.04
+        runs-on:
+  push:
+    branches: [main] ubuntu-24.04
         steps:
           - name: Get Time
             id: get-time
@@ -198,8 +210,12 @@ jobs:
           - name: Setup JDK
             uses: actions/setup-java@v4
             with:
-                java-version: '17'
-                distribution: 'temurin'
+                java-version:
+  push:
+    branches: [main] '17'
+                distribution:
+  push:
+    branches: [main] 'temurin'
                 cache: gradle
           - name: Install Dependencies
             run: sudo apt-get install --no-install-recommends -y ccache
@@ -230,7 +246,9 @@ jobs:
                   #- name: SDL 1.2
                   #  flags: '-DNBC_PLATFORM=sdl1 -DNBC_GFX_API=OGL'
         name: MinGW-w64 (${{ matrix.name }})
-        runs-on: ubuntu-24.04
+        runs-on:
+  push:
+    branches: [main] ubuntu-24.04
         steps:
           - name: Get Time
             id: get-time
@@ -270,7 +288,9 @@ jobs:
 
     switch:
         name: Nintendo Switch
-        runs-on: ubuntu-24.04
+        runs-on:
+  push:
+    branches: [main] ubuntu-24.04
         container:
             image: devkitpro/devkita64@sha256:7ca6fb93e8f576a65bbfe07b537b67664a974e06eabe4e94359e3e026a0f0b0c
         steps:
@@ -304,7 +324,9 @@ jobs:
 
     windows:
         name: MSVC (Win32 (OGL))
-        runs-on: windows-2025
+        runs-on:
+  push:
+    branches: [main] windows-2025
         steps:
           - name: Checkout Repository
             uses: actions/checkout@v6
